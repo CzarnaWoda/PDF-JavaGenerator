@@ -1,8 +1,6 @@
 package com.orange.pdf.callback;
 
-import java.util.Map;
-
-public interface Callback<E> {
+public interface PdfCallback<E> {
 
     void success(E success);
 

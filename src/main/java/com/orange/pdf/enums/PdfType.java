@@ -1,4 +1,5 @@
 package com.orange.pdf.enums;
 
-public class PdfType {
+public enum PdfType {
+   A4,A5
 }
