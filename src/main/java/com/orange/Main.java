@@ -1,35 +1,63 @@
 package com.orange;
 
-import com.orange.pdf.builder.PdfBuilder;
-import com.orange.pdf.builder.data.PdfTableItem;
-import com.orange.pdf.callback.PdfCallback;
-import org.apache.pdfbox.pdmodel.PDDocument;
+import com.orange.pdf.builder.data.LibraryPdfTableItem;
+import com.orange.pdf.service.LibraryPdfService;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * Klasa główna do generowania raportów bibliotecznych.
+ * Można ją uruchomić z wiersza poleceń, aby wygenerować raport w formacie PDF.
+ */
 public class Main {
     public static void main(String[] args) {
         // Domyślne wartości
-        String companyName = "Projektowanie i Wdrażanie";
-        String systemsDesc = "Systemów Informatycznych";
-        String address = "44-100 Gliwice";
-        String street = "ul. Orlat Śląskich";
-        String nip = "631-132-20-90";
-        String documentNumber = "Pz 1/2006";
-        String referenceNumber = "123/06";
-        LocalDate documentDate = LocalDate.of(2006, 2, 28);
-        String recipient = "HURTOWNIA WIERTELKO";
-        String receivedBy = "Jacek Krywult";
-        String outputPath = "receipt.pdf";
-        List<PdfTableItem> items = new ArrayList<>();
+        String libraryName = "Biblioteka Miejska";
+        String libraryDesc = "System Zarządzania Księgozbiorem";
+        String address = "ul. Akademicka 16";
+        String city = "44-100 Gliwice";
+        String reportNumber = "INV-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-001";
+        LocalDate reportDate = LocalDate.now();
+        String generatedBy = "Administrator";
+        String outputPath = "library-report.pdf";
+        String reportType = "inventory"; // domyślnie raport inwentaryzacyjny
+        String genre = null;     // filtr gatunku (domyślnie brak)
+        String status = null;    // filtr statusu (domyślnie brak)
+        String publisher = null; // filtr wydawcy (domyślnie brak)
 
-        // Domyślne pozycje dokumentu
-        items.add(new PdfTableItem("2002/BPP/BT024", "PODNOŚNIK HYDRAULICZNY  OKB 15 T", 2000, "szt.", 2000.00));
-        items.add(new PdfTableItem("2004/BPP/W119E", "ZAWIESIE WĘŻOWE 127 / 3M", 1000, "szt.", 1000.00));
+        List<LibraryPdfTableItem> books = new ArrayList<>();
+        Map<String, Integer> statusCounts = new HashMap<>();
+        Map<String, Integer> genreCounts = new HashMap<>();
+        Map<String, Integer> publisherCounts = new HashMap<>();
+
+        // Domyślne przykładowe książki z rozszerzonym konstruktorem dla uwzględnienia opisu
+        books.add(new LibraryPdfTableItem("1001", "Władca Pierścieni", "J.R.R. Tolkien", "Czytelnik", "Dostępna", "Fantasy", "Klasyka literatury fantasy opowiadająca o wyprawie hobbita Frodo Bagginsa."));
+        books.add(new LibraryPdfTableItem("1002", "Harry Potter i Kamień Filozoficzny", "J.K. Rowling", "Media Rodzina", "Wypożyczona", "Fantasy", "Pierwsza część przygód młodego czarodzieja."));
+        books.add(new LibraryPdfTableItem("1003", "Wiedźmin: Ostatnie życzenie", "Andrzej Sapkowski", "SuperNowa", "Dostępna", "Fantasy", "Zbiór opowiadań o przygodach wiedźmina Geralta z Rivii."));
+        books.add(new LibraryPdfTableItem("1004", "Pan Tadeusz", "Adam Mickiewicz", "Ossolineum", "Dostępna", "Klasyka", "Polska epopeja narodowa z 1834 roku."));
+        books.add(new LibraryPdfTableItem("1005", "Lalka", "Bolesław Prus", "PIW", "Wypożyczona", "Klasyka", "Powieść społeczno-obyczajowa z 1890 roku."));
+
+        // Domyślne liczby statusów
+        statusCounts.put("Dostępna", 3);
+        statusCounts.put("Wypożyczona", 2);
+        statusCounts.put("Zarezerwowana", 0);
+
+        // Domyślne liczby gatunków
+        genreCounts.put("Fantasy", 3);
+        genreCounts.put("Klasyka", 2);
+
+        // Domyślne liczby wydawców
+        publisherCounts.put("Czytelnik", 1);
+        publisherCounts.put("Media Rodzina", 1);
+        publisherCounts.put("SuperNowa", 1);
+        publisherCounts.put("Ossolineum", 1);
+        publisherCounts.put("PIW", 1);
 
         // Parsowanie argumentów
         if (args.length > 0) {
@@ -43,16 +71,16 @@ public class Main {
                 // Parsowanie argumentów wiersza poleceń
                 for (int i = 0; i < args.length; i++) {
                     switch (args[i]) {
-                        case "--company", "-c" -> {
-                            if (i + 1 < args.length) companyName = args[++i];
+                        case "--library", "-l" -> {
+                            if (i + 1 < args.length) libraryName = args[++i];
                             else {
-                                System.err.println("Błąd: Brak wartości dla parametru --company");
+                                System.err.println("Błąd: Brak wartości dla parametru --library");
                                 printHelp();
                                 return;
                             }
                         }
                         case "--desc", "-d" -> {
-                            if (i + 1 < args.length) systemsDesc = args[++i];
+                            if (i + 1 < args.length) libraryDesc = args[++i];
                             else {
                                 System.err.println("Błąd: Brak wartości dla parametru --desc");
                                 printHelp();
@@ -67,34 +95,18 @@ public class Main {
                                 return;
                             }
                         }
-                        case "--street", "-s" -> {
-                            if (i + 1 < args.length) street = args[++i];
+                        case "--city", "-c" -> {
+                            if (i + 1 < args.length) city = args[++i];
                             else {
-                                System.err.println("Błąd: Brak wartości dla parametru --street");
+                                System.err.println("Błąd: Brak wartości dla parametru --city");
                                 printHelp();
                                 return;
                             }
                         }
-                        case "--nip", "-n" -> {
-                            if (i + 1 < args.length) nip = args[++i];
+                        case "--report", "-r" -> {
+                            if (i + 1 < args.length) reportNumber = args[++i];
                             else {
-                                System.err.println("Błąd: Brak wartości dla parametru --nip");
-                                printHelp();
-                                return;
-                            }
-                        }
-                        case "--document", "-dn" -> {
-                            if (i + 1 < args.length) documentNumber = args[++i];
-                            else {
-                                System.err.println("Błąd: Brak wartości dla parametru --document");
-                                printHelp();
-                                return;
-                            }
-                        }
-                        case "--reference", "-r" -> {
-                            if (i + 1 < args.length) referenceNumber = args[++i];
-                            else {
-                                System.err.println("Błąd: Brak wartości dla parametru --reference");
+                                System.err.println("Błąd: Brak wartości dla parametru --report");
                                 printHelp();
                                 return;
                             }
@@ -102,7 +114,7 @@ public class Main {
                         case "--date", "-dt" -> {
                             if (i + 1 < args.length) {
                                 try {
-                                    documentDate = LocalDate.parse(args[++i], DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                                    reportDate = LocalDate.parse(args[++i], DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                                 } catch (DateTimeParseException e) {
                                     System.err.println("Błąd: Nieprawidłowy format daty. Użyj formatu: yyyy-MM-dd");
                                     printHelp();
@@ -114,18 +126,10 @@ public class Main {
                                 return;
                             }
                         }
-                        case "--recipient", "-rc" -> {
-                            if (i + 1 < args.length) recipient = args[++i];
+                        case "--by", "-b" -> {
+                            if (i + 1 < args.length) generatedBy = args[++i];
                             else {
-                                System.err.println("Błąd: Brak wartości dla parametru --recipient");
-                                printHelp();
-                                return;
-                            }
-                        }
-                        case "--receivedby", "-rb" -> {
-                            if (i + 1 < args.length) receivedBy = args[++i];
-                            else {
-                                System.err.println("Błąd: Brak wartości dla parametru --receivedby");
+                                System.err.println("Błąd: Brak wartości dla parametru --by");
                                 printHelp();
                                 return;
                             }
@@ -138,28 +142,70 @@ public class Main {
                                 return;
                             }
                         }
-                        case "--item", "-i" -> {
-                            if (i + 5 < args.length) {
-                                try {
-                                    String itemIndex = args[++i];
-                                    String itemName = args[++i];
-                                    int quantity = Integer.parseInt(args[++i]);
-                                    String unit = args[++i];
-                                    double value = Double.parseDouble(args[++i].replace(',', '.'));
-
-                                    // Jeśli dodajemy pierwszy element za pomocą parametrów, wyczyść domyślne elementy
-                                    if (items.size() == 2 && items.get(0).getIndex().equals("2002/BPP/BT024")) {
-                                        items.clear();
-                                    }
-
-                                    items.add(new PdfTableItem(itemIndex, itemName, quantity, unit, value));
-                                } catch (NumberFormatException e) {
-                                    System.err.println("Błąd: Nieprawidłowy format liczby w parametrze --item");
+                        case "--type", "-t" -> {
+                            if (i + 1 < args.length) {
+                                reportType = args[++i].toLowerCase();
+                                if (!reportType.equals("inventory") && !reportType.equals("borrowed") && !reportType.equals("filtered")) {
+                                    System.err.println("Błąd: Nieznany typ raportu: " + reportType);
                                     printHelp();
                                     return;
                                 }
                             } else {
-                                System.err.println("Błąd: Niewystarczająca liczba wartości dla parametru --item");
+                                System.err.println("Błąd: Brak wartości dla parametru --type");
+                                printHelp();
+                                return;
+                            }
+                        }
+                        case "--genre", "-g" -> {
+                            if (i + 1 < args.length) genre = args[++i];
+                            else {
+                                System.err.println("Błąd: Brak wartości dla parametru --genre");
+                                printHelp();
+                                return;
+                            }
+                        }
+                        case "--status", "-st" -> {
+                            if (i + 1 < args.length) status = args[++i];
+                            else {
+                                System.err.println("Błąd: Brak wartości dla parametru --status");
+                                printHelp();
+                                return;
+                            }
+                        }
+                        case "--publisher", "-p" -> {
+                            if (i + 1 < args.length) publisher = args[++i];
+                            else {
+                                System.err.println("Błąd: Brak wartości dla parametru --publisher");
+                                printHelp();
+                                return;
+                            }
+                        }
+                        case "--book", "-bk" -> {
+                            if (i + 7 < args.length) {
+                                String bookId = args[++i];
+                                String title = args[++i];
+                                String authors = args[++i];
+                                String bookPublisher = args[++i];
+                                String bookStatus = args[++i];
+                                String bookGenre = args[++i];
+                                String description = args[++i];
+
+                                // Jeśli dodajemy pierwszą książkę za pomocą parametrów, wyczyść domyślne książki
+                                if (!books.isEmpty() && books.get(0).getBookId().equals("1001")) {
+                                    books.clear();
+                                    statusCounts.clear();
+                                    genreCounts.clear();
+                                    publisherCounts.clear();
+                                }
+
+                                books.add(new LibraryPdfTableItem(bookId, title, authors, bookPublisher, bookStatus, bookGenre, description));
+
+                                // Aktualizacja liczników
+                                statusCounts.put(bookStatus, statusCounts.getOrDefault(bookStatus, 0) + 1);
+                                genreCounts.put(bookGenre, genreCounts.getOrDefault(bookGenre, 0) + 1);
+                                publisherCounts.put(bookPublisher, publisherCounts.getOrDefault(bookPublisher, 0) + 1);
+                            } else {
+                                System.err.println("Błąd: Niewystarczająca liczba wartości dla parametru --book");
                                 printHelp();
                                 return;
                             }
@@ -183,39 +229,44 @@ public class Main {
 
         // Tworzenie dokumentu
         try {
-            System.out.println("Generowanie dokumentu PDF...");
-            PdfBuilder.createWarehouseReceipt()
-                    .buildWarehouseReceipt(
-                            companyName,
-                            systemsDesc,
-                            address + street,
-                            nip,
-                            documentNumber,
-                            referenceNumber,
-                            documentDate,
-                            recipient,
-                            items,
-                            receivedBy
-                    )
-                    .save(outputPath, new PdfCallback<>() {
-                        @Override
-                        public void success(PDDocument success) {
-                            System.out.println("Dokument utworzony pomyślnie:");
-                            if (success.getDocumentInformation() != null && success.getDocumentInformation().getTitle() != null) {
-                                System.out.println("Tytuł dokumentu: " + success.getDocumentInformation().getTitle());
-                            }
-                        }
+            System.out.println("Generowanie raportu bibliotecznego PDF...");
+            LibraryPdfService pdfService = new LibraryPdfService();
 
-                        @Override
-                        public void error(PDDocument error) {
-                            System.err.println("Błąd podczas tworzenia dokumentu!");
-                            if (error != null && error.getDocumentInformation() != null && error.getDocumentInformation().getTitle() != null) {
-                                System.err.println("Tytuł dokumentu: " + error.getDocumentInformation().getTitle());
-                            }
-                        }
-                    });
+            if (reportType.equals("inventory")) {
+                pdfService.generateInventoryReport(
+                        libraryName,
+                        libraryDesc,
+                        address,
+                        city,
+                        reportNumber,
+                        reportDate,
+                        books,
+                        statusCounts,
+                        genreCounts,
+                        publisherCounts,
+                        outputPath,
+                        generatedBy
+                );
+            } else if (reportType.equals("borrowed")) {
+                pdfService.generateBorrowedBooksReport(
+                        books,
+                        outputPath,
+                        generatedBy
+                );
+            } else if (reportType.equals("filtered")) {
+                pdfService.generateFilteredReport(
+                        books,
+                        genre,
+                        status,
+                        publisher,
+                        outputPath,
+                        generatedBy
+                );
+            }
+
+            System.out.println("Raport biblioteczny został pomyślnie wygenerowany: " + outputPath);
         } catch (Exception e) {
-            System.err.println("Wystąpił błąd podczas generowania dokumentu: " + e.getMessage());
+            System.err.println("Wystąpił błąd podczas generowania raportu: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -224,35 +275,35 @@ public class Main {
      * Wyświetla pomoc dotyczącą używania programu
      */
     private static void printHelp() {
-        System.out.println("Generowanie dokumentu magazynowego (Przyjęcie na magazyn - Pz)");
+        System.out.println("Generator raportów bibliotecznych PDF");
         System.out.println();
-        System.out.println("Użycie: java -jar app.jar [opcje]");
+        System.out.println("Użycie: java -jar pdfjava-generator.jar [opcje]");
         System.out.println();
         System.out.println("Opcje:");
-        System.out.println("  --help, -h              Wyświetla tę pomoc");
-        System.out.println("  --company, -c <tekst>   Nazwa firmy (domyślnie: Projektowanie i Wdrażanie)");
-        System.out.println("  --desc, -d <tekst>      Opis firmy (domyślnie: Systemów Informatycznych)");
-        System.out.println("  --address, -a <tekst>   Adres firmy - kod i miasto (domyślnie: 44-100 Gliwice)");
-        System.out.println("  --street, -s <tekst>    Ulica (domyślnie: ul. Orlat Śląskich)");
-        System.out.println("  --nip, -n <tekst>       NIP firmy (domyślnie: 631-132-20-90)");
-        System.out.println("  --document, -dn <tekst> Numer dokumentu (domyślnie: Pz 1/2006)");
-        System.out.println("  --reference, -r <tekst> Numer referencyjny (domyślnie: 123/06)");
-        System.out.println("  --date, -dt <data>      Data dokumentu w formacie yyyy-MM-dd (domyślnie: 2006-02-28)");
-        System.out.println("  --recipient, -rc <tekst> Nazwa odbiorcy (domyślnie: HURTOWNIA WIERTELKO)");
-        System.out.println("  --receivedby, -rb <tekst> Osoba przyjmująca (domyślnie: Jacek Krywult)");
-        System.out.println("  --output, -o <ścieżka>  Ścieżka wyjściowa pliku (domyślnie: receipt.pdf)");
-        System.out.println("  --item, -i <indeks> <nazwa> <ilość> <jednostka> <wartość>");
-        System.out.println("                         Dodaje pozycję do dokumentu. Można użyć wielokrotnie.");
-        System.out.println("                         Ilość musi być liczbą całkowitą, wartość liczbą dziesiętną.");
+        System.out.println("  --help, -h                Wyświetla tę pomoc");
+        System.out.println("  --library, -l <tekst>     Nazwa biblioteki");
+        System.out.println("  --desc, -d <tekst>        Opis biblioteki");
+        System.out.println("  --address, -a <tekst>     Adres - ulica");
+        System.out.println("  --city, -c <tekst>        Miasto i kod pocztowy");
+        System.out.println("  --report, -r <tekst>      Numer raportu");
+        System.out.println("  --date, -dt <data>        Data raportu w formacie yyyy-MM-dd");
+        System.out.println("  --by, -b <tekst>          Osoba generująca raport");
+        System.out.println("  --output, -o <ścieżka>    Ścieżka wyjściowa pliku PDF");
+        System.out.println("  --type, -t <typ>          Typ raportu: 'inventory', 'borrowed' lub 'filtered'");
+        System.out.println("  --genre, -g <tekst>       Filtr gatunku (dla typu filtered)");
+        System.out.println("  --status, -st <tekst>     Filtr statusu (dla typu filtered)");
+        System.out.println("  --publisher, -p <tekst>   Filtr wydawcy (dla typu filtered)");
+        System.out.println("  --book, -bk <id> <tytuł> <autor> <wydawca> <status> <gatunek> <opis>");
+        System.out.println("                            Dodaje książkę do raportu. Można użyć wielokrotnie.");
         System.out.println();
         System.out.println("Przykłady:");
-        System.out.println("  java -jar app.jar --output moj_dokument.pdf");
-        System.out.println("  java -jar app.jar -dt 2025-01-15 -rc \"SKLEP ABC\" -o dokument.pdf");
-        System.out.println("  java -jar app.jar -i \"ABC123\" \"WIERTARKA 500W\" 1 \"szt.\" 1200,50");
+        System.out.println("  java -jar pdfjava-generator.jar --output raport_biblioteka.pdf");
+        System.out.println("  java -jar pdfjava-generator.jar -t borrowed -o wypozyczone.pdf");
+        System.out.println("  java -jar pdfjava-generator.jar -t filtered -g Fantasy -o fantasy_books.pdf");
+        System.out.println("  java -jar pdfjava-generator.jar -bk \"2001\" \"Hobbit\" \"J.R.R. Tolkien\" \"Iskry\" \"Dostępna\" \"Fantasy\" \"Powieść fantasy\"");
         System.out.println();
         System.out.println("Uwagi:");
         System.out.println("- Jeśli nie podano argumentów, użyte zostaną wartości domyślne");
         System.out.println("- Aby użyć wartości z spacjami, należy je ująć w cudzysłowy");
-        System.out.println("- Wartości liczbowe mogą używać przecinka lub kropki jako separatora dziesiętnego");
     }
 }

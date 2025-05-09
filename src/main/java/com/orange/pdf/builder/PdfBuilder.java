@@ -15,6 +15,7 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -139,13 +140,13 @@ public class PdfBuilder {
         return this;
     }
 
-    private void drawLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException {
+    void drawLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException {
         contentStream.moveTo(xStart, yStart);
         contentStream.lineTo(xEnd, yEnd);
         contentStream.stroke();
     }
 
-    private void drawDottedLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException {
+    void drawDottedLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException {
         contentStream.setLineDashPattern(new float[]{3.0f}, 0);
         drawLine(xStart, yStart, xEnd, yEnd);
         contentStream.setLineDashPattern(new float[]{}, 0);
@@ -504,4 +505,181 @@ public class PdfBuilder {
         return new PdfBuilder(PdfType.A4, "Warehouse receipt", "Orange")
                 .loadFontsFromResources(regularFontPath,boldFontPath,italicFontPath);
     }
+
+    /**
+     * Rysuje nagłówek raportu
+     */
+    void drawReportHeader(
+            String libraryName,
+            String libraryDesc,
+            String address,
+            String city,
+            String reportNumber,
+            LocalDate reportDate,
+            float rightStartX,
+            float currentY,
+            float headerHeight,
+            float leftWidth,
+            float rightWidth) throws IOException {
+
+        float margin = getMargin();
+        float tableWidth = getWidth();
+        PDPageContentStream contentStream = getContentStream();
+
+        // Ramka nagłówka
+        drawLine(margin, currentY, margin + tableWidth, currentY);
+        drawLine(margin, currentY - headerHeight, margin + tableWidth, currentY - headerHeight);
+        drawLine(margin, currentY, margin, currentY - headerHeight);
+        drawLine(margin + tableWidth, currentY, margin + tableWidth, currentY - headerHeight);
+        drawLine(rightStartX, currentY, rightStartX, currentY - headerHeight);
+
+        // Dane biblioteki po lewej stronie
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 9);
+        contentStream.newLineAtOffset(margin + 5, currentY - 15);
+        contentStream.showText(libraryName);
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 9);
+        contentStream.newLineAtOffset(margin + 5, currentY - 27);
+        contentStream.showText(libraryDesc);
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 9);
+        contentStream.newLineAtOffset(margin + 5, currentY - 39);
+        contentStream.showText(address);
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 9);
+        contentStream.newLineAtOffset(margin + 5, currentY - 51);
+        contentStream.showText(city);
+        contentStream.endText();
+
+        // Numer raportu i data po prawej stronie
+        float labelWidth = 80f;
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(rightStartX + 5, currentY - 15);
+        contentStream.showText("Nr raportu:");
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 9);
+        contentStream.newLineAtOffset(rightStartX + labelWidth, currentY - 15);
+        contentStream.showText(reportNumber);
+        contentStream.endText();
+
+        // Tytuł raportu
+        float rowY1 = currentY - 30f;
+        drawLine(rightStartX, rowY1, margin + tableWidth, rowY1);
+
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 14);
+        contentStream.newLineAtOffset(rightStartX + (rightWidth/2) - 60, rowY1 - 20);
+        contentStream.showText("RAPORT BIBLIOTECZNY");
+        contentStream.endText();
+
+        // Data raportu
+        float rowY2 = rowY1 - 30f;
+        drawLine(rightStartX, rowY2, margin + tableWidth, rowY2);
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(rightStartX + 5, rowY2 - 20);
+        contentStream.showText("Data raportu:");
+        contentStream.endText();
+
+        String formattedDate = reportDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 9);
+        contentStream.newLineAtOffset(rightStartX + labelWidth, rowY2 - 20);
+        contentStream.showText(formattedDate);
+        contentStream.endText();
+    }
+
+    /**
+     * Zwraca wysokość strony A4 pomniejszoną o marginesy
+     * @return wysokość obszaru roboczego strony
+     */
+    float getHeight() {
+        return PDRectangle.A4.getHeight() - 2 * getMargin();
+    }
+
+    /**
+     * Dodaje nową stronę do dokumentu
+     */
+    void addNewPage() throws IOException {
+        // Zakładając, że getContentStream() zwraca aktualny content stream
+        PDPageContentStream currentContentStream = getContentStream();
+        if (currentContentStream != null) {
+            // Upewnij się, że wszystkie operacje tekstowe są zakończone
+            safeEndText(currentContentStream);
+            currentContentStream.close();
+        }
+
+        // Dodaj nową stronę do dokumentu
+        PDDocument document = getDocument();
+        PDPage newPage = createPage();
+        document.addPage(newPage);
+
+        // Utwórz nowy content stream dla nowej strony
+        PDPageContentStream newContentStream = new PDPageContentStream(document, newPage);
+
+        // Ustaw nowy content stream jako aktualny
+        setContentStream(newContentStream);
+    }
+
+    /**
+     * Bezpiecznie kończy tekst w content streamie
+     */
+    void safeEndText(PDPageContentStream stream) {
+        if (stream != null) {
+            try {
+                stream.endText();
+            } catch (IOException | IllegalStateException e) {
+                // Ignoruj wyjątek - może nie być aktywnego stanu tekstu
+            }
+        }
+    }
+
+    /**
+     * Ustawia nowy content stream
+     * @param newContentStream nowy content stream
+     */
+    private void setContentStream(PDPageContentStream newContentStream) {
+        // Zapisz referencję do nowego content stream
+        if (this.getContentStream() != null) {
+            try {
+                // Najpierw upewnij się, że nie ma aktywnych operacji tekstowych
+                safeEndText(this.getContentStream());
+                this.getContentStream().close();
+            } catch (IOException e) {
+                throw new PDPageContentStreamException("Błąd podczas zamykania poprzedniego content stream: " + e.getMessage());
+            }
+        }
+
+        try {
+            // Tu musisz użyć odpowiedniej metody z klasy bazowej lub dostosować do twojej implementacji
+            Field contentStreamField = PdfBuilder.class.getDeclaredField("contentStream");
+            contentStreamField.setAccessible(true);
+            contentStreamField.set(this, newContentStream);
+        } catch (Exception e) {
+            throw new RuntimeException("Nie można ustawić nowego content stream: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Tworzy nową stronę A4
+     * @return utworzona strona PDF
+     */
+    private PDPage createPage() {
+        return new PDPage(PDRectangle.A4);
+    }
+
+
+
 }
