@@ -6,10 +6,8 @@ import com.orange.pdf.service.LibraryPdfService;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Klasa główna do generowania raportów bibliotecznych.
@@ -30,11 +28,15 @@ public class Main {
         String genre = null;     // filtr gatunku (domyślnie brak)
         String status = null;    // filtr statusu (domyślnie brak)
         String publisher = null; // filtr wydawcy (domyślnie brak)
+        LocalDate startDate = null; // data początkowa zakresu (domyślnie brak)
+        LocalDate endDate = null;   // data końcowa zakresu (domyślnie brak)
+        boolean useSampleLoanCounts = false; // czy używać próbkowych danych o wypożyczeniach
 
         List<LibraryPdfTableItem> books = new ArrayList<>();
         Map<String, Integer> statusCounts = new HashMap<>();
         Map<String, Integer> genreCounts = new HashMap<>();
         Map<String, Integer> publisherCounts = new HashMap<>();
+        Map<String, Integer> loanCounts = new HashMap<>();
 
         // Domyślne przykładowe książki z rozszerzonym konstruktorem dla uwzględnienia opisu
         books.add(new LibraryPdfTableItem("1001", "Władca Pierścieni", "J.R.R. Tolkien", "Czytelnik", "Dostępna", "Fantasy", "Klasyka literatury fantasy opowiadająca o wyprawie hobbita Frodo Bagginsa."));
@@ -42,15 +44,22 @@ public class Main {
         books.add(new LibraryPdfTableItem("1003", "Wiedźmin: Ostatnie życzenie", "Andrzej Sapkowski", "SuperNowa", "Dostępna", "Fantasy", "Zbiór opowiadań o przygodach wiedźmina Geralta z Rivii."));
         books.add(new LibraryPdfTableItem("1004", "Pan Tadeusz", "Adam Mickiewicz", "Ossolineum", "Dostępna", "Klasyka", "Polska epopeja narodowa z 1834 roku."));
         books.add(new LibraryPdfTableItem("1005", "Lalka", "Bolesław Prus", "PIW", "Wypożyczona", "Klasyka", "Powieść społeczno-obyczajowa z 1890 roku."));
+        books.add(new LibraryPdfTableItem("1006", "Gra o Tron", "George R.R. Martin", "Zysk i S-ka", "Wypożyczona", "Fantasy", "Pierwsza część sagi Pieśń Lodu i Ognia."));
+        books.add(new LibraryPdfTableItem("1007", "Solaris", "Stanisław Lem", "Wydawnictwo Literackie", "Dostępna", "Sci-Fi", "Powieść science fiction o kontakcie z obcą inteligencją."));
+        books.add(new LibraryPdfTableItem("1008", "Duma i uprzedzenie", "Jane Austen", "Prószyński i S-ka", "Dostępna", "Klasyka", "Klasyczna powieść obyczajowa."));
+        books.add(new LibraryPdfTableItem("1009", "Hobbit", "J.R.R. Tolkien", "Iskry", "Wypożyczona", "Fantasy", "Powieść fantasy poprzedzająca Władcę Pierścieni."));
+        books.add(new LibraryPdfTableItem("1010", "Firma", "John Grisham", "Albatros", "Dostępna", "Thriller", "Thriller prawniczy."));
 
         // Domyślne liczby statusów
-        statusCounts.put("Dostępna", 3);
-        statusCounts.put("Wypożyczona", 2);
+        statusCounts.put("Dostępna", 6);
+        statusCounts.put("Wypożyczona", 4);
         statusCounts.put("Zarezerwowana", 0);
 
         // Domyślne liczby gatunków
-        genreCounts.put("Fantasy", 3);
-        genreCounts.put("Klasyka", 2);
+        genreCounts.put("Fantasy", 4);
+        genreCounts.put("Klasyka", 3);
+        genreCounts.put("Sci-Fi", 1);
+        genreCounts.put("Thriller", 1);
 
         // Domyślne liczby wydawców
         publisherCounts.put("Czytelnik", 1);
@@ -58,6 +67,23 @@ public class Main {
         publisherCounts.put("SuperNowa", 1);
         publisherCounts.put("Ossolineum", 1);
         publisherCounts.put("PIW", 1);
+        publisherCounts.put("Zysk i S-ka", 1);
+        publisherCounts.put("Wydawnictwo Literackie", 1);
+        publisherCounts.put("Prószyński i S-ka", 1);
+        publisherCounts.put("Iskry", 1);
+        publisherCounts.put("Albatros", 1);
+
+        // Domyślne liczby wypożyczeń dla raportu popularności
+        loanCounts.put("1001", 45); // Władca Pierścieni
+        loanCounts.put("1002", 78); // Harry Potter
+        loanCounts.put("1003", 62); // Wiedźmin
+        loanCounts.put("1004", 23); // Pan Tadeusz
+        loanCounts.put("1005", 18); // Lalka
+        loanCounts.put("1006", 89); // Gra o Tron
+        loanCounts.put("1007", 31); // Solaris
+        loanCounts.put("1008", 27); // Duma i uprzedzenie
+        loanCounts.put("1009", 56); // Hobbit
+        loanCounts.put("1010", 19); // Firma
 
         // Parsowanie argumentów
         if (args.length > 0) {
@@ -145,7 +171,8 @@ public class Main {
                         case "--type", "-t" -> {
                             if (i + 1 < args.length) {
                                 reportType = args[++i].toLowerCase();
-                                if (!reportType.equals("inventory") && !reportType.equals("borrowed") && !reportType.equals("filtered")) {
+                                if (!reportType.equals("inventory") && !reportType.equals("borrowed") &&
+                                        !reportType.equals("filtered") && !reportType.equals("popularity")) {
                                     System.err.println("Błąd: Nieznany typ raportu: " + reportType);
                                     printHelp();
                                     return;
@@ -180,6 +207,36 @@ public class Main {
                                 return;
                             }
                         }
+                        case "--start-date", "-sd" -> {
+                            if (i + 1 < args.length) {
+                                try {
+                                    startDate = LocalDate.parse(args[++i], DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                                } catch (DateTimeParseException e) {
+                                    System.err.println("Błąd: Nieprawidłowy format daty początkowej. Użyj formatu: yyyy-MM-dd");
+                                    printHelp();
+                                    return;
+                                }
+                            } else {
+                                System.err.println("Błąd: Brak wartości dla parametru --start-date");
+                                printHelp();
+                                return;
+                            }
+                        }
+                        case "--end-date", "-ed" -> {
+                            if (i + 1 < args.length) {
+                                try {
+                                    endDate = LocalDate.parse(args[++i], DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                                } catch (DateTimeParseException e) {
+                                    System.err.println("Błąd: Nieprawidłowy format daty końcowej. Użyj formatu: yyyy-MM-dd");
+                                    printHelp();
+                                    return;
+                                }
+                            } else {
+                                System.err.println("Błąd: Brak wartości dla parametru --end-date");
+                                printHelp();
+                                return;
+                            }
+                        }
                         case "--book", "-bk" -> {
                             if (i + 7 < args.length) {
                                 String bookId = args[++i];
@@ -196,6 +253,7 @@ public class Main {
                                     statusCounts.clear();
                                     genreCounts.clear();
                                     publisherCounts.clear();
+                                    loanCounts.clear();
                                 }
 
                                 books.add(new LibraryPdfTableItem(bookId, title, authors, bookPublisher, bookStatus, bookGenre, description));
@@ -204,11 +262,35 @@ public class Main {
                                 statusCounts.put(bookStatus, statusCounts.getOrDefault(bookStatus, 0) + 1);
                                 genreCounts.put(bookGenre, genreCounts.getOrDefault(bookGenre, 0) + 1);
                                 publisherCounts.put(bookPublisher, publisherCounts.getOrDefault(bookPublisher, 0) + 1);
+
+                                // Dodajemy losową liczbę wypożyczeń dla raportu popularności
+                                Random random = new Random();
+                                loanCounts.put(bookId, random.nextInt(100));
                             } else {
                                 System.err.println("Błąd: Niewystarczająca liczba wartości dla parametru --book");
                                 printHelp();
                                 return;
                             }
+                        }
+                        case "--loan-count", "-lc" -> {
+                            if (i + 2 < args.length) {
+                                String bookId = args[++i];
+                                try {
+                                    int count = Integer.parseInt(args[++i]);
+                                    loanCounts.put(bookId, count);
+                                } catch (NumberFormatException e) {
+                                    System.err.println("Błąd: Liczba wypożyczeń musi być liczbą całkowitą");
+                                    printHelp();
+                                    return;
+                                }
+                            } else {
+                                System.err.println("Błąd: Niewystarczająca liczba wartości dla parametru --loan-count");
+                                printHelp();
+                                return;
+                            }
+                        }
+                        case "--use-sample-data", "-usd" -> {
+                            useSampleLoanCounts = true;
                         }
                         default -> {
                             System.err.println("Błąd: Nieznany parametr: " + args[i]);
@@ -262,6 +344,18 @@ public class Main {
                         outputPath,
                         generatedBy
                 );
+            } else if (reportType.equals("popularity")) {
+                // Używamy metody z przekazaniem danych o wypożyczeniach
+                    pdfService.generatePopularityReport(
+                            books,
+                            loanCounts,
+                            genre,
+                            publisher,
+                            startDate,
+                            endDate,
+                            outputPath,
+                            generatedBy
+                    );
             }
 
             System.out.println("Raport biblioteczny został pomyślnie wygenerowany: " + outputPath);
@@ -289,18 +383,25 @@ public class Main {
         System.out.println("  --date, -dt <data>        Data raportu w formacie yyyy-MM-dd");
         System.out.println("  --by, -b <tekst>          Osoba generująca raport");
         System.out.println("  --output, -o <ścieżka>    Ścieżka wyjściowa pliku PDF");
-        System.out.println("  --type, -t <typ>          Typ raportu: 'inventory', 'borrowed' lub 'filtered'");
-        System.out.println("  --genre, -g <tekst>       Filtr gatunku (dla typu filtered)");
+        System.out.println("  --type, -t <typ>          Typ raportu: 'inventory', 'borrowed', 'filtered' lub 'popularity'");
+        System.out.println("  --genre, -g <tekst>       Filtr gatunku (dla typu filtered/popularity)");
         System.out.println("  --status, -st <tekst>     Filtr statusu (dla typu filtered)");
-        System.out.println("  --publisher, -p <tekst>   Filtr wydawcy (dla typu filtered)");
+        System.out.println("  --publisher, -p <tekst>   Filtr wydawcy (dla typu filtered/popularity)");
+        System.out.println("  --start-date, -sd <data>  Data początkowa zakresu w formacie yyyy-MM-dd (dla typu popularity)");
+        System.out.println("  --end-date, -ed <data>    Data końcowa zakresu w formacie yyyy-MM-dd (dla typu popularity)");
         System.out.println("  --book, -bk <id> <tytuł> <autor> <wydawca> <status> <gatunek> <opis>");
         System.out.println("                            Dodaje książkę do raportu. Można użyć wielokrotnie.");
+        System.out.println("  --loan-count, -lc <id> <liczba>");
+        System.out.println("                            Określa liczbę wypożyczeń dla książki (dla typu popularity).");
+        System.out.println("  --use-sample-data, -usd   Używa przykładowych danych o wypożyczeniach generowanych automatycznie");
         System.out.println();
         System.out.println("Przykłady:");
         System.out.println("  java -jar pdfjava-generator.jar --output raport_biblioteka.pdf");
         System.out.println("  java -jar pdfjava-generator.jar -t borrowed -o wypozyczone.pdf");
         System.out.println("  java -jar pdfjava-generator.jar -t filtered -g Fantasy -o fantasy_books.pdf");
-        System.out.println("  java -jar pdfjava-generator.jar -bk \"2001\" \"Hobbit\" \"J.R.R. Tolkien\" \"Iskry\" \"Dostępna\" \"Fantasy\" \"Powieść fantasy\"");
+        System.out.println("  java -jar pdfjava-generator.jar -t popularity -g Fantasy -sd 2023-01-01 -ed 2023-12-31 -o popularity_report.pdf");
+        System.out.println("  java -jar pdfjava-generator.jar -t popularity -usd -o popularity_sample_data.pdf");
+        System.out.println("  java -jar pdfjava-generator.jar -bk \"2001\" \"Hobbit\" \"J.R.R. Tolkien\" \"Iskry\" \"Dostępna\" \"Fantasy\" \"Powieść fantasy\" -lc \"2001\" 42");
         System.out.println();
         System.out.println("Uwagi:");
         System.out.println("- Jeśli nie podano argumentów, użyte zostaną wartości domyślne");

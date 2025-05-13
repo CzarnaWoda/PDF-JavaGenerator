@@ -1,9 +1,6 @@
 package com.orange.pdf.builder;
 
-import com.orange.pdf.builder.data.BookStatusSummary;
-import com.orange.pdf.builder.data.GenreSummary;
-import com.orange.pdf.builder.data.LibraryPdfTableItem;
-import com.orange.pdf.builder.data.PublisherSummary;
+import com.orange.pdf.builder.data.*;
 import com.orange.pdf.callback.PdfCallback;
 import com.orange.pdf.enums.PdfLibraryReportType;
 import com.orange.pdf.enums.PdfType;
@@ -840,6 +837,338 @@ public class LibraryPdfBuilder extends PdfBuilder {
         }
 
         return text.substring(0, maxLength - 3) + "...";
+    }
+    public LibraryPdfBuilder buildPopularityReport(
+            String libraryName,
+            String libraryDesc,
+            String address,
+            String city,
+            String reportNumber,
+            LocalDate reportDate,
+            List<LibraryPdfTableItem> books,
+            List<BookStatusSummary> statusSummaries,
+            List<GenreSummary> genreSummaries,
+            List<PublisherSummary> publisherSummaries,
+            String generatedBy) {
+
+        try {
+            float tableWidth = getWidth();
+            float headerHeight = 120f;
+            float leftWidth = tableWidth * 0.5f;
+            float rightWidth = tableWidth - leftWidth;
+            float margin = getMargin();
+            float pageHeight = getHeight();
+            float minBottomMargin = 50f; // Minimalny margines dolny
+
+            float currentY = getStartY();
+            float rightStartX = margin + leftWidth;
+
+            // Nagłówek dokumentu
+            drawReportHeader(libraryName, libraryDesc, address, city, reportNumber,
+                    reportDate, rightStartX, currentY, headerHeight, leftWidth, rightWidth);
+
+            currentY = currentY - headerHeight - 20;
+
+            // Rysowanie tabeli książek z obsługą wielu stron i dodatkową kolumną popularności
+            currentY = drawPopularityBooksTableWithPaging(books, margin, currentY, tableWidth, pageHeight, minBottomMargin,
+                    libraryName, libraryDesc, address, city, reportNumber, reportDate);
+
+            // Sprawdź czy jest wystarczająco miejsca na podsumowanie gatunków
+            float genreSummaryHeight = calculateGenreSummaryHeight(genreSummaries);
+            if (currentY - genreSummaryHeight - 40 < minBottomMargin) {
+                // Dodaj nową stronę
+                addNewPage();
+                currentY = getStartY();
+            }
+
+            // Sekcja podsumowania gatunków (sortowana wg popularności)
+            float genreSummaryY = currentY - 40;
+            drawGenreSummary(genreSummaries, margin, genreSummaryY, tableWidth);
+            currentY = genreSummaryY - genreSummaryHeight;
+
+            // Sprawdź czy jest wystarczająco miejsca na podsumowanie wydawców
+            float publisherSummaryHeight = calculatePublisherSummaryHeight(publisherSummaries);
+            if (currentY - publisherSummaryHeight - 40 < minBottomMargin) {
+                // Dodaj nową stronę
+                addNewPage();
+                currentY = getStartY();
+            }
+
+            // Sekcja podsumowania wydawców (sortowana wg popularności)
+            float publisherSummaryY = currentY - 40;
+            drawPublisherSummary(publisherSummaries, margin, publisherSummaryY, tableWidth);
+            currentY = publisherSummaryY - publisherSummaryHeight;
+
+            // Sprawdź czy jest wystarczająco miejsca na sekcję podpisów
+            if (currentY - 80 < minBottomMargin) {
+                // Dodaj nową stronę
+                addNewPage();
+                currentY = getStartY();
+            }
+
+            // Sekcja podpisów
+            float signaturesY = currentY - 80;
+            drawSignatureSection(margin, signaturesY, tableWidth, generatedBy, reportDate);
+
+        } catch (IOException e) {
+            safeEndText(getContentStream());
+            throw new PDPageContentStreamException("Nie udało się zbudować raportu popularności: " + e.getMessage());
+        }
+
+        return this;
+    }
+
+    /**
+     * Rysuje tabelę książek z obsługą wielu stron i dodatkową kolumną popularności
+     *
+     * @return aktualna pozycja Y po narysowaniu tabeli
+     */
+    private float drawPopularityBooksTableWithPaging(List<LibraryPdfTableItem> books, float x, float y, float tableWidth,
+                                                     float pageHeight, float minBottomMargin,
+                                                     String libraryName, String libraryDesc, String address, String city,
+                                                     String reportNumber, LocalDate reportDate) throws IOException {
+
+        float rowHeight = 25f;
+        float headerRowHeight = 25f;
+        float margin = getMargin();
+
+        // Definiuje szerokości kolumn z uwzględnieniem dwóch dodatkowych kolumn (ranking i liczba wypożyczeń)
+        float col1Width = 20f;        // Lp.
+        float col2Width = 25f;        // Ranking
+        float col3Width = 50f;        // ID
+        float col4Width = 140f;       // Tytuł
+        float col5Width = 110f;       // Autor(zy)
+        float col6Width = 80f;        // Wydawca
+        float col7Width = 50f;        // Gatunek
+        float col8Width = tableWidth - col1Width - col2Width - col3Width - col4Width - col5Width - col6Width - col7Width; // Wypożyczenia
+
+        float currentY = y;
+        int currentRowIndex = 0;
+
+        // Rysuj nagłówek tabeli na pierwszej stronie
+        drawPopularityTableHeader(x, currentY, tableWidth, headerRowHeight, col1Width, col2Width, col3Width, col4Width, col5Width, col6Width, col7Width);
+        currentY -= headerRowHeight;
+
+        // Przetwarzanie każdego wiersza z książkami
+        while (currentRowIndex < books.size()) {
+            // Sprawdź czy jest miejsce na kolejny wiersz
+            if (currentY - rowHeight < minBottomMargin) {
+                // Zakończ aktualną stronę i rozpocznij nową
+                addNewPage();
+
+                // Na nowej stronie dodaj krótki nagłówek
+                float headerHeight = 50f;
+
+                currentY = getStartY();
+
+                // Nagłówek dokumentu - uproszczona wersja na kolejnych stronach
+                drawSimpleHeader(libraryName, "Kontynuacja raportu popularności - strona " + getDocument().getNumberOfPages(),
+                        reportNumber, reportDate, margin, currentY, headerHeight, tableWidth);
+
+                currentY = currentY - headerHeight - 20;
+
+                // Rysuj nagłówek tabeli na nowej stronie
+                drawPopularityTableHeader(x, currentY, tableWidth, headerRowHeight, col1Width, col2Width, col3Width, col4Width, col5Width, col6Width, col7Width);
+                currentY -= headerRowHeight;
+            }
+
+            // Rysuj wiersz z książką
+            LibraryPdfTableItem book = books.get(currentRowIndex);
+            // Sprawdź czy książka jest instancją PopularityPdfTableItem i pobierz dane o popularności
+            int rank = currentRowIndex + 1; // Domyślnie użyj indeksu jako rangi
+            int loanCount = 0;              // Domyślna liczba wypożyczeń
+
+            if (book instanceof PopularityPdfTableItem) {
+                PopularityPdfTableItem popularityBook = (PopularityPdfTableItem) book;
+                rank = popularityBook.getRank();
+                loanCount = popularityBook.getLoanCount();
+            }
+
+            drawPopularityBookRow(book, currentRowIndex + 1, rank, loanCount, x, currentY, tableWidth, rowHeight,
+                    col1Width, col2Width, col3Width, col4Width, col5Width, col6Width, col7Width);
+
+            currentY -= rowHeight;
+            currentRowIndex++;
+        }
+
+        return currentY;
+    }
+
+    /**
+     * Rysuje nagłówek tabeli książek dla raportu popularności
+     */
+    private void drawPopularityTableHeader(float x, float y, float tableWidth, float rowHeight,
+                                           float col1Width, float col2Width, float col3Width,
+                                           float col4Width, float col5Width, float col6Width, float col7Width) throws IOException {
+
+        PDPageContentStream contentStream = getContentStream();
+
+        // Linie nagłówka
+        drawLine(x, y, x + tableWidth, y);
+        drawLine(x, y - rowHeight, x + tableWidth, y - rowHeight);
+        drawLine(x, y, x, y - rowHeight);
+
+        float nextX = x;
+
+        nextX += col1Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col2Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col3Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col4Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col5Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col6Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col7Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        drawLine(x + tableWidth, y, x + tableWidth, y - rowHeight);
+
+        // Etykiety kolumn
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 8);
+        contentStream.newLineAtOffset(x + 5, y - 15);
+        contentStream.showText("Lp.");
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + 5, y - 15);
+        contentStream.showText("Rank");
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + 5, y - 15);
+        contentStream.showText("ID");
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + 5, y - 15);
+        contentStream.showText("Tytuł");
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + col4Width + 5, y - 15);
+        contentStream.showText("Autor(zy)");
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + col4Width + col5Width + 5, y - 15);
+        contentStream.showText("Wydawca");
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + col4Width + col5Width + col6Width + 5, y - 15);
+        contentStream.showText("Gatunek");
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getBoldFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + col4Width + col5Width + col6Width + col7Width + 5, y - 15);
+        contentStream.showText("Wypożyczeń");
+        contentStream.endText();
+    }
+
+    /**
+     * Rysuje wiersz tabeli książek dla raportu popularności
+     */
+    private void drawPopularityBookRow(LibraryPdfTableItem book, int rowNum, int rank, int loanCount, float x, float y, float tableWidth,
+                                       float rowHeight, float col1Width, float col2Width, float col3Width,
+                                       float col4Width, float col5Width, float col6Width, float col7Width) throws IOException {
+
+        PDPageContentStream contentStream = getContentStream();
+
+        // Linie wiersza
+        drawLine(x, y - rowHeight, x + tableWidth, y - rowHeight);
+        drawLine(x, y, x, y - rowHeight);
+
+        float nextX = x;
+
+        nextX += col1Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col2Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col3Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col4Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col5Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col6Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        nextX += col7Width;
+        drawLine(nextX, y, nextX, y - rowHeight);
+
+        drawLine(x + tableWidth, y, x + tableWidth, y - rowHeight);
+
+        // Zawartość wiersza
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(x + 5, y - 15);
+        contentStream.showText(String.valueOf(rowNum));
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + 5, y - 15);
+        contentStream.showText(String.valueOf(rank));
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + 5, y - 15);
+        contentStream.showText(book.getBookId());
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + 5, y - 15);
+        contentStream.showText(truncateText(book.getTitle(), 25));
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + col4Width + 5, y - 15);
+        contentStream.showText(truncateText(book.getAuthors(), 20));
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + col4Width + col5Width + 5, y - 15);
+        contentStream.showText(truncateText(book.getPublisher(), 15));
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + col4Width + col5Width + col6Width + 5, y - 15);
+        contentStream.showText(truncateText(book.getGenre(), 10));
+        contentStream.endText();
+
+        contentStream.beginText();
+        contentStream.setFont(getRegularFont(), 8);
+        contentStream.newLineAtOffset(x + col1Width + col2Width + col3Width + col4Width + col5Width + col6Width + col7Width + 5, y - 15);
+        contentStream.showText(String.valueOf(loanCount));
+        contentStream.endText();
     }
 
 

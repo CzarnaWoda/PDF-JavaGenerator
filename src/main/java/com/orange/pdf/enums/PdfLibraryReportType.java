@@ -10,7 +10,17 @@ public enum PdfLibraryReportType {
     INVENTORY,
 
     /**
-     * Raport książek wypożyczonych
+     * Raport książek popularnych
      */
     POPULARITY,
+
+    /**
+     * Raport książek wypożyczonych
+     */
+    BORROWED,
+
+    /**
+     * Raport książek filtrowany
+     */
+    FILTERED
 }

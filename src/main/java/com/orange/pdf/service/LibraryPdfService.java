@@ -1,19 +1,15 @@
 package com.orange.pdf.service;
 
 import com.orange.pdf.builder.LibraryPdfBuilder;
-import com.orange.pdf.builder.data.BookStatusSummary;
-import com.orange.pdf.builder.data.GenreSummary;
-import com.orange.pdf.builder.data.LibraryPdfTableItem;
-import com.orange.pdf.builder.data.PublisherSummary;
+import com.orange.pdf.builder.data.*;
 import com.orange.pdf.callback.PdfCallback;
 import com.orange.pdf.enums.PdfLibraryReportType;
+import com.orange.pdf.report.PopularityPdfReport;
 import org.apache.pdfbox.pdmodel.PDDocument;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -293,86 +289,38 @@ public class LibraryPdfService {
     }
 
     /**
-     * Generuje raport popularności książek na podstawie wypożyczeń
+     * Generuje raport popularności książek z określonymi liczbami wypożyczeń
      *
-     * @param libraryName nazwa biblioteki/instytucji
-     * @param libraryDesc opis biblioteki/instytucji (tytuł raportu)
-     * @param address adres - ulica
-     * @param city miasto i kod pocztowy
-     * @param reportNumber numer raportu
+     * @param books lista książek
+     * @param loanCountMap mapa zawierająca liczby wypożyczeń dla poszczególnych książek (klucz: ID książki)
+     * @param genre filtr gatunku (null lub pusty string, jeśli bez filtrowania)
+     * @param publisher filtr wydawcy (null lub pusty string, jeśli bez filtrowania)
      * @param startDate data początkowa okresu (może być null)
      * @param endDate data końcowa okresu (może być null)
-     * @param books lista książek wraz z liczbą wypożyczeń
-     * @param genreCounts mapa gatunków z liczbą wypożyczeń
-     * @param statusCounts mapa statusów książek
      * @param outputPath ścieżka do zapisania pliku PDF
      * @param generatedBy osoba/użytkownik generujący raport
      */
     public void generatePopularityReport(
-            String libraryName,
-            String libraryDesc,
-            String address,
-            String city,
-            String reportNumber,
+            List<LibraryPdfTableItem> books,
+            Map<String, Integer> loanCountMap,
+            String genre,
+            String publisher,
             LocalDate startDate,
             LocalDate endDate,
-            List<LibraryPdfTableItem> books,
-            Map<String, Integer> genreCounts,
-            Map<String, Integer> statusCounts,
             String outputPath,
             String generatedBy) {
 
-        // Przygotuj mapy wydawców z dostępnych książek
-        Map<String, Integer> publisherCounts = countBooksByPublisher(books);
-
-        // Dodatkowy tekst dla raportu popularności
-        StringBuilder reportTitleBuilder = new StringBuilder(libraryDesc);
-
-        // Informacje o okresie są już zawarte w tytule
-
-        String combinedDesc = reportTitleBuilder.toString();
-
-        // Konwersja map na listy BookStatusSummary, GenreSummary i PublisherSummary
-        List<BookStatusSummary> statusSummaries = statusCounts.entrySet().stream()
-                .map(entry -> new BookStatusSummary(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
-
-        List<GenreSummary> genreSummaries = genreCounts.entrySet().stream()
-                .map(entry -> new GenreSummary(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
-
-        List<PublisherSummary> publisherSummaries = publisherCounts.entrySet().stream()
-                .map(entry -> new PublisherSummary(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
-
-        try {
-            LibraryPdfBuilder.createLibraryReport(PdfLibraryReportType.POPULARITY)
-                    .buildLibraryInventoryReport(
-                            libraryName,
-                            combinedDesc,
-                            address,
-                            city,
-                            reportNumber,
-                            LocalDate.now(),
-                            books,
-                            statusSummaries,
-                            genreSummaries,
-                            publisherSummaries,
-                            generatedBy
-                    )
-                    .save(outputPath, new PdfCallback<>() {
-                        @Override
-                        public void success(PDDocument document) {
-                            System.out.println("Raport popularności został wygenerowany pomyślnie: " + outputPath);
-                        }
-
-                        @Override
-                        public void error(PDDocument document) {
-                            System.err.println("Błąd podczas generowania raportu popularności!");
-                        }
-                    });
-        } catch (Exception e) {
-            throw new RuntimeException("Błąd podczas generowania raportu popularności: " + e.getMessage(), e);
-        }
+        // Użycie klasy PopularityPdfReport do generowania raportu
+        PopularityPdfReport popularityReport = new PopularityPdfReport();
+        popularityReport.generatePopularityReport(
+                books,
+                loanCountMap,
+                genre,
+                publisher,
+                startDate,
+                endDate,
+                outputPath,
+                generatedBy
+        );
     }
 }
