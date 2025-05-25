@@ -1,13 +1,16 @@
 package com.orange;
 
 import com.orange.pdf.builder.data.LibraryPdfTableItem;
+import com.orange.pdf.overdue.data.OverduePdfTableItem;
+import com.orange.pdf.overdue.service.OverduePdfService;
 import com.orange.pdf.service.LibraryPdfService;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Klasa główna do generowania raportów bibliotecznych.
@@ -30,15 +33,15 @@ public class Main {
         String publisher = null; // filtr wydawcy (domyślnie brak)
         LocalDate startDate = null; // data początkowa zakresu (domyślnie brak)
         LocalDate endDate = null;   // data końcowa zakresu (domyślnie brak)
-        boolean useSampleLoanCounts = false; // czy używać próbkowych danych o wypożyczeniach
 
         List<LibraryPdfTableItem> books = new ArrayList<>();
+        List<OverduePdfTableItem> overdueLoans = new ArrayList<>();
         Map<String, Integer> statusCounts = new HashMap<>();
         Map<String, Integer> genreCounts = new HashMap<>();
         Map<String, Integer> publisherCounts = new HashMap<>();
         Map<String, Integer> loanCounts = new HashMap<>();
 
-        // Domyślne przykładowe książki z rozszerzonym konstruktorem dla uwzględnienia opisu
+        // Domyślne przykładowe książki
         books.add(new LibraryPdfTableItem("1001", "Władca Pierścieni", "J.R.R. Tolkien", "Czytelnik", "Dostępna", "Fantasy", "Klasyka literatury fantasy opowiadająca o wyprawie hobbita Frodo Bagginsa."));
         books.add(new LibraryPdfTableItem("1002", "Harry Potter i Kamień Filozoficzny", "J.K. Rowling", "Media Rodzina", "Wypożyczona", "Fantasy", "Pierwsza część przygód młodego czarodzieja."));
         books.add(new LibraryPdfTableItem("1003", "Wiedźmin: Ostatnie życzenie", "Andrzej Sapkowski", "SuperNowa", "Dostępna", "Fantasy", "Zbiór opowiadań o przygodach wiedźmina Geralta z Rivii."));
@@ -49,6 +52,37 @@ public class Main {
         books.add(new LibraryPdfTableItem("1008", "Duma i uprzedzenie", "Jane Austen", "Prószyński i S-ka", "Dostępna", "Klasyka", "Klasyczna powieść obyczajowa."));
         books.add(new LibraryPdfTableItem("1009", "Hobbit", "J.R.R. Tolkien", "Iskry", "Wypożyczona", "Fantasy", "Powieść fantasy poprzedzająca Władcę Pierścieni."));
         books.add(new LibraryPdfTableItem("1010", "Firma", "John Grisham", "Albatros", "Dostępna", "Thriller", "Thriller prawniczy."));
+
+        // Domyślne przykładowe zalegające wypożyczenia
+        overdueLoans.add(new OverduePdfTableItem("L001", "1002", "Harry Potter i Kamień Filozoficzny",
+                "J.K. Rowling", "Media Rodzina", "Fantasy", "U001", "Jan Kowalski",
+                "jan.kowalski@email.com",
+                Instant.now().minus(45, ChronoUnit.DAYS),
+                Instant.now().minus(15, ChronoUnit.DAYS), "LIB001"));
+
+        overdueLoans.add(new OverduePdfTableItem("L002", "1005", "Lalka",
+                "Bolesław Prus", "PIW", "Klasyka", "U002", "Anna Nowak",
+                "anna.nowak@email.com",
+                Instant.now().minus(60, ChronoUnit.DAYS),
+                Instant.now().minus(30, ChronoUnit.DAYS), "LIB002"));
+
+        overdueLoans.add(new OverduePdfTableItem("L003", "1006", "Gra o Tron",
+                "George R.R. Martin", "Zysk i S-ka", "Fantasy", "U003", "Piotr Wiśniewski",
+                "piotr.wisniewski@email.com",
+                Instant.now().minus(25, ChronoUnit.DAYS),
+                Instant.now().minus(5, ChronoUnit.DAYS), "LIB001"));
+
+        overdueLoans.add(new OverduePdfTableItem("L004", "1009", "Hobbit",
+                "J.R.R. Tolkien", "Iskry", "Fantasy", "U004", "Maria Kowalczyk",
+                "maria.kowalczyk@email.com",
+                Instant.now().minus(40, ChronoUnit.DAYS),
+                Instant.now().minus(10, ChronoUnit.DAYS), "LIB003"));
+
+        overdueLoans.add(new OverduePdfTableItem("L005", "1007", "Solaris",
+                "Stanisław Lem", "Wydawnictwo Literackie", "Sci-Fi", "U005", "Tomasz Zieliński",
+                "tomasz.zielinski@email.com",
+                Instant.now().minus(50, ChronoUnit.DAYS),
+                Instant.now().minus(20, ChronoUnit.DAYS), "LIB002"));
 
         // Domyślne liczby statusów
         statusCounts.put("Dostępna", 6);
@@ -172,7 +206,8 @@ public class Main {
                             if (i + 1 < args.length) {
                                 reportType = args[++i].toLowerCase();
                                 if (!reportType.equals("inventory") && !reportType.equals("borrowed") &&
-                                        !reportType.equals("filtered") && !reportType.equals("popularity")) {
+                                        !reportType.equals("filtered") && !reportType.equals("popularity") &&
+                                        !reportType.equals("overdue")) {
                                     System.err.println("Błąd: Nieznany typ raportu: " + reportType);
                                     printHelp();
                                     return;
@@ -289,8 +324,44 @@ public class Main {
                                 return;
                             }
                         }
-                        case "--use-sample-data", "-usd" -> {
-                            useSampleLoanCounts = true;
+                        case "--loan", "-ln" -> {
+                            if (i + 11 < args.length) {
+                                String loanId = args[++i];
+                                String bookId = args[++i];
+                                String title = args[++i];
+                                String authors = args[++i];
+                                String bookPublisher = args[++i];
+                                String bookGenre = args[++i];
+                                String userId = args[++i];
+                                String userName = args[++i];
+                                String userEmail = args[++i];
+                                String userPhone = args[++i];
+                                String daysOverdue = args[++i];
+
+                                try {
+                                    int overdueDaysInt = Integer.parseInt(daysOverdue);
+
+                                    // Jeśli dodajemy pierwsze wypożyczenie za pomocą parametrów, wyczyść domyślne
+                                    if (!overdueLoans.isEmpty() && overdueLoans.get(0).getLoanId().equals("L001")) {
+                                        overdueLoans.clear();
+                                    }
+
+                                    Instant borrowedAt = Instant.now().minus(30 + overdueDaysInt, ChronoUnit.DAYS);
+                                    Instant dueDate = Instant.now().minus(overdueDaysInt, ChronoUnit.DAYS);
+
+                                    overdueLoans.add(new OverduePdfTableItem(loanId, bookId, title, authors, bookPublisher,
+                                            bookGenre, userId, userName, userEmail, borrowedAt, dueDate, "LIB001"));
+
+                                } catch (NumberFormatException e) {
+                                    System.err.println("Błąd: Liczba dni zaległości musi być liczbą całkowitą");
+                                    printHelp();
+                                    return;
+                                }
+                            } else {
+                                System.err.println("Błąd: Niewystarczająca liczba wartości dla parametru --loan");
+                                printHelp();
+                                return;
+                            }
                         }
                         default -> {
                             System.err.println("Błąd: Nieznany parametr: " + args[i]);
@@ -312,9 +383,9 @@ public class Main {
         // Tworzenie dokumentu
         try {
             System.out.println("Generowanie raportu bibliotecznego PDF...");
-            LibraryPdfService pdfService = new LibraryPdfService();
 
             if (reportType.equals("inventory")) {
+                LibraryPdfService pdfService = new LibraryPdfService();
                 pdfService.generateInventoryReport(
                         libraryName,
                         libraryDesc,
@@ -330,12 +401,14 @@ public class Main {
                         generatedBy
                 );
             } else if (reportType.equals("borrowed")) {
+                LibraryPdfService pdfService = new LibraryPdfService();
                 pdfService.generateBorrowedBooksReport(
                         books,
                         outputPath,
                         generatedBy
                 );
             } else if (reportType.equals("filtered")) {
+                LibraryPdfService pdfService = new LibraryPdfService();
                 pdfService.generateFilteredReport(
                         books,
                         genre,
@@ -345,17 +418,28 @@ public class Main {
                         generatedBy
                 );
             } else if (reportType.equals("popularity")) {
-                // Używamy metody z przekazaniem danych o wypożyczeniach
-                    pdfService.generatePopularityReport(
-                            books,
-                            loanCounts,
-                            genre,
-                            publisher,
-                            startDate,
-                            endDate,
-                            outputPath,
-                            generatedBy
-                    );
+                LibraryPdfService pdfService = new LibraryPdfService();
+                pdfService.generatePopularityReport(
+                        books,
+                        loanCounts,
+                        genre,
+                        publisher,
+                        startDate,
+                        endDate,
+                        outputPath,
+                        generatedBy
+                );
+            } else if (reportType.equals("overdue")) {
+                OverduePdfService overdueService = new OverduePdfService();
+                overdueService.generateOverdueReport(
+                        overdueLoans,
+                        startDate,
+                        endDate,
+                        genre,
+                        publisher,
+                        outputPath,
+                        generatedBy
+                );
             }
 
             System.out.println("Raport biblioteczny został pomyślnie wygenerowany: " + outputPath);
@@ -383,28 +467,32 @@ public class Main {
         System.out.println("  --date, -dt <data>        Data raportu w formacie yyyy-MM-dd");
         System.out.println("  --by, -b <tekst>          Osoba generująca raport");
         System.out.println("  --output, -o <ścieżka>    Ścieżka wyjściowa pliku PDF");
-        System.out.println("  --type, -t <typ>          Typ raportu: 'inventory', 'borrowed', 'filtered' lub 'popularity'");
-        System.out.println("  --genre, -g <tekst>       Filtr gatunku (dla typu filtered/popularity)");
+        System.out.println("  --type, -t <typ>          Typ raportu: 'inventory', 'borrowed', 'filtered', 'popularity' lub 'overdue'");
+        System.out.println("  --genre, -g <tekst>       Filtr gatunku (dla typu filtered/popularity/overdue)");
         System.out.println("  --status, -st <tekst>     Filtr statusu (dla typu filtered)");
-        System.out.println("  --publisher, -p <tekst>   Filtr wydawcy (dla typu filtered/popularity)");
-        System.out.println("  --start-date, -sd <data>  Data początkowa zakresu w formacie yyyy-MM-dd (dla typu popularity)");
-        System.out.println("  --end-date, -ed <data>    Data końcowa zakresu w formacie yyyy-MM-dd (dla typu popularity)");
+        System.out.println("  --publisher, -p <tekst>   Filtr wydawcy (dla typu filtered/popularity/overdue)");
+        System.out.println("  --start-date, -sd <data>  Data początkowa zakresu w formacie yyyy-MM-dd (dla typu popularity/overdue)");
+        System.out.println("  --end-date, -ed <data>    Data końcowa zakresu w formacie yyyy-MM-dd (dla typu popularity/overdue)");
         System.out.println("  --book, -bk <id> <tytuł> <autor> <wydawca> <status> <gatunek> <opis>");
         System.out.println("                            Dodaje książkę do raportu. Można użyć wielokrotnie.");
         System.out.println("  --loan-count, -lc <id> <liczba>");
         System.out.println("                            Określa liczbę wypożyczeń dla książki (dla typu popularity).");
-        System.out.println("  --use-sample-data, -usd   Używa przykładowych danych o wypożyczeniach generowanych automatycznie");
+        System.out.println("  --loan, -ln <id_wyp> <id_książki> <tytuł> <autor> <wydawca> <gatunek> <id_użytkownika> <nazwa_użytkownika> <email> <telefon> <dni_zaległości>");
+        System.out.println("                            Dodaje zalegające wypożyczenie do raportu. Można użyć wielokrotnie.");
         System.out.println();
         System.out.println("Przykłady:");
         System.out.println("  java -jar pdfjava-generator.jar --output raport_biblioteka.pdf");
         System.out.println("  java -jar pdfjava-generator.jar -t borrowed -o wypozyczone.pdf");
         System.out.println("  java -jar pdfjava-generator.jar -t filtered -g Fantasy -o fantasy_books.pdf");
         System.out.println("  java -jar pdfjava-generator.jar -t popularity -g Fantasy -sd 2023-01-01 -ed 2023-12-31 -o popularity_report.pdf");
-        System.out.println("  java -jar pdfjava-generator.jar -t popularity -usd -o popularity_sample_data.pdf");
-        System.out.println("  java -jar pdfjava-generator.jar -bk \"2001\" \"Hobbit\" \"J.R.R. Tolkien\" \"Iskry\" \"Dostępna\" \"Fantasy\" \"Powieść fantasy\" -lc \"2001\" 42");
+        System.out.println("  java -jar pdfjava-generator.jar -t overdue -g Fantasy -sd 2024-01-01 -ed 2024-06-30 -o overdue_report.pdf");
+        System.out.println("  java -jar pdfjava-generator.jar -t overdue -o overdue_all.pdf");
+        System.out.println("  java -jar pdfjava-generator.jar -ln \"L100\" \"1001\" \"Test Book\" \"Test Author\" \"Test Publisher\" \"Fantasy\" \"U100\" \"Test User\" \"test@email.com\" \"+48123456789\" \"15\"");
         System.out.println();
         System.out.println("Uwagi:");
         System.out.println("- Jeśli nie podano argumentów, użyte zostaną wartości domyślne");
         System.out.println("- Aby użyć wartości z spacjami, należy je ująć w cudzysłowy");
+        System.out.println("- Raport zalegających (overdue) pokazuje użytkowników z przeterminowanymi wypożyczeniami");
+        System.out.println("- Filtry czasowe w raporcie zalegających dotyczą daty wypożyczenia, nie daty zaległości");
     }
 }

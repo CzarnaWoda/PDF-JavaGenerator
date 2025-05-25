@@ -15,12 +15,13 @@ public enum PdfLibraryReportType {
     POPULARITY,
 
     /**
-     * Raport książek wypożyczonych
-     */
-    BORROWED,
-
-    /**
      * Raport książek filtrowany
      */
-    FILTERED
+    FILTERED,
+
+    /**
+     * Raport zalegających użytkowników
+     */
+    OVERDUE
+
 }

@@ -140,13 +140,13 @@ public class PdfBuilder {
         return this;
     }
 
-    void drawLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException {
+    protected void drawLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException {
         contentStream.moveTo(xStart, yStart);
         contentStream.lineTo(xEnd, yEnd);
         contentStream.stroke();
     }
 
-    void drawDottedLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException {
+    protected void drawDottedLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException {
         contentStream.setLineDashPattern(new float[]{3.0f}, 0);
         drawLine(xStart, yStart, xEnd, yEnd);
         contentStream.setLineDashPattern(new float[]{}, 0);
@@ -605,14 +605,14 @@ public class PdfBuilder {
      * Zwraca wysokość strony A4 pomniejszoną o marginesy
      * @return wysokość obszaru roboczego strony
      */
-    float getHeight() {
+    protected float getHeight() {
         return PDRectangle.A4.getHeight() - 2 * getMargin();
     }
 
     /**
      * Dodaje nową stronę do dokumentu
      */
-    void addNewPage() throws IOException {
+    protected void addNewPage() throws IOException {
         // Zakładając, że getContentStream() zwraca aktualny content stream
         PDPageContentStream currentContentStream = getContentStream();
         if (currentContentStream != null) {
@@ -636,7 +636,7 @@ public class PdfBuilder {
     /**
      * Bezpiecznie kończy tekst w content streamie
      */
-    void safeEndText(PDPageContentStream stream) {
+    protected void safeEndText(PDPageContentStream stream) {
         if (stream != null) {
             try {
                 stream.endText();
@@ -679,7 +679,6 @@ public class PdfBuilder {
     private PDPage createPage() {
         return new PDPage(PDRectangle.A4);
     }
-
 
 
 }
