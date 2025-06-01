@@ -24,6 +24,7 @@ public class OverduePdfBuilder extends PdfBuilder {
 
     private static final String REPORT_TITLE = "Raport zalegających użytkowników";
     private static final String REPORT_AUTHOR = "System zarządzania biblioteką";
+    private static final float SECTION_SPACING = 25f; // Standardowy odstęp między sekcjami
 
     private OverduePdfBuilder(PdfType pdfType) {
         super(pdfType, REPORT_TITLE, REPORT_AUTHOR);
@@ -68,65 +69,51 @@ public class OverduePdfBuilder extends PdfBuilder {
             drawOverdueReportHeader(libraryName, libraryDesc, address, city, reportNumber,
                     reportDate, rightStartX, currentY, headerHeight, leftWidth, rightWidth);
 
-            currentY = currentY - headerHeight - 20;
+            currentY = currentY - headerHeight - SECTION_SPACING;
 
             // Tabela zalegających z wielostronicowością
             currentY = drawOverdueTable(overdueLoans, margin, currentY, tableWidth, pageHeight,
                     minBottomMargin, libraryName, reportNumber, reportDate);
 
-            // MNIEJSZY ODSTĘP PO TABELI GŁÓWNEJ
-            currentY -= 15f;
+            // Standardowy odstęp po tabeli głównej
+            currentY -= SECTION_SPACING;
 
-            // Sekcje podsumowań z mniejszymi odstępami
-            final float currentYForCategorySummary = currentY;
-            currentY = drawSectionIfNeeded(currentY, minBottomMargin,
-                    () -> drawOverdueCategorySummary(categorySummaries, margin, currentYForCategorySummary - 25, tableWidth),
-                    () -> calculateSummaryHeight(categorySummaries.size()));
-
-            // MNIEJSZY ODSTĘP PO PODSUMOWANIU ZALEGŁOŚCI
+            // Sekcje podsumowań ze standardowymi odstępami
             if (categorySummaries != null && !categorySummaries.isEmpty()) {
-                currentY -= 15f;
+                final float finalCurrentY1 = currentY;
+                currentY = drawSectionIfNeeded(currentY, minBottomMargin,
+                        () -> drawOverdueCategorySummary(categorySummaries, margin, finalCurrentY1, tableWidth),
+                        () -> calculateSummaryHeight(categorySummaries.size()),
+                        true);
             }
 
-            final float currentYForGenreSummary = currentY;
-            currentY = drawSectionIfNeeded(currentY, minBottomMargin,
-                    () -> drawGenreSummarySection(genreSummaries, margin, currentYForGenreSummary - 25, tableWidth),
-                    () -> calculateSummaryHeight(genreSummaries.size()));
-
-            // MNIEJSZY ODSTĘP PO PODSUMOWANIU GATUNKÓW
             if (genreSummaries != null && !genreSummaries.isEmpty()) {
-                currentY -= 15f;
+                final float finalCurrentY2 = currentY;
+                currentY = drawSectionIfNeeded(currentY, minBottomMargin,
+                        () -> drawGenreSummarySection(genreSummaries, margin, finalCurrentY2, tableWidth),
+                        () -> calculateSummaryHeight(genreSummaries.size()),
+                        true);
             }
 
-            // PODSUMOWANIE WYDAWCÓW z mniejszym odstępem
             if (publisherSummaries != null && !publisherSummaries.isEmpty()) {
-                float publisherSummaryHeight = calculateSummaryHeight(publisherSummaries.size());
-
-                // Sprawdź czy jest miejsce na wydawców
-                if (currentY - publisherSummaryHeight - 40f < minBottomMargin) {
-                    addNewPage();
-                    currentY = getStartY();
-                }
-
-                // Rysuj podsumowanie wydawców
-                drawPublisherSummarySection(publisherSummaries, margin, currentY - 25, tableWidth);
-                currentY -= (publisherSummaryHeight + 25f);
-
-                // MNIEJSZY ODSTĘP PO PODSUMOWANIU WYDAWCÓW
-                currentY -= 20f;
+                final float finalCurrentY3 = currentY;
+                currentY = drawSectionIfNeeded(currentY, minBottomMargin,
+                        () -> drawPublisherSummarySection(publisherSummaries, margin, finalCurrentY3, tableWidth),
+                        () -> calculateSummaryHeight(publisherSummaries.size()),
+                        true);
             }
 
-            // PODPIS NA SAMYM KOŃCU z dużym marginesem
+            // Podpis na samym końcu z większym marginesem
             float signatureHeight = 80f;
-            float minSpaceForSignature = 120f; // Duży margines dla podpisu
+            float minSpaceForSignature = 150f; // Większy margines dla podpisu
 
             // Sprawdź czy jest wystarczająco miejsca na podpis
             if (currentY - signatureHeight < minSpaceForSignature) {
                 addNewPage();
-                currentY = getStartY() - 60f; // Lekki margines od góry na nowej stronie
+                currentY = getStartY(); // Zacznij od samej góry nowej strony
             }
 
-            // Rysuj podpis z bezpiecznym marginesem
+            // Rysuj podpis
             drawOverdueSignatureSection(margin, currentY - signatureHeight, tableWidth, generatedBy, reportDate);
 
         } catch (IOException e) {
@@ -160,7 +147,7 @@ public class OverduePdfBuilder extends PdfBuilder {
         while (rowIndex < loans.size()) {
             if (currentY - rowHeight < minBottomMargin) {
                 addNewPage();
-                currentY = getStartY();
+                currentY = getStartY(); // Od samej góry nowej strony
                 drawSimpleOverdueHeader(libraryName, "Kontynuacja - strona " + getDocument().getNumberOfPages(),
                         reportNumber, reportDate, getMargin(), currentY, 50f, tableWidth);
                 currentY -= 70f;
@@ -174,6 +161,89 @@ public class OverduePdfBuilder extends PdfBuilder {
         }
 
         return currentY;
+    }
+
+    /**
+     * Rysuje sekcję jeśli jest miejsce, inaczej dodaje nową stronę
+     */
+    private float drawSectionIfNeeded(float currentY, float minBottomMargin,
+                                      SectionDrawer drawer, HeightCalculator heightCalc, boolean hasData) throws IOException {
+        if (!hasData) {
+            return currentY; // Nie rysuj pustej sekcji
+        }
+
+        float sectionHeight = heightCalc.calculate();
+
+        // Sprawdź czy jest miejsce
+        if (currentY - sectionHeight - SECTION_SPACING < minBottomMargin) {
+            addNewPage();
+            currentY = getStartY(); // Od samej góry nowej strony
+        }
+
+        drawer.draw();
+        return currentY - sectionHeight - SECTION_SPACING; // Standardowy odstęp po sekcji
+    }
+
+    /**
+     * Rysuje podsumowanie kategorii zaległości
+     */
+    private void drawOverdueCategorySummary(List<OverdueCategorySummary> summaries, float x, float y, float tableWidth) throws IOException {
+        if (summaries == null || summaries.isEmpty()) return;
+
+        float currentY = y;
+        drawSectionHeader("Podsumowanie zaległości:", x, currentY);
+        currentY -= 20f;
+
+        String[] headers = {"Kategoria", "Liczba", "Łączne dni", "Średnia"};
+        float[] colWidths = {120f, 80f, 100f, tableWidth - 300f};
+
+        drawTableFrame(x, currentY, tableWidth, 25f, colWidths);
+        drawRowHeaders(headers, x, currentY, colWidths);
+        currentY -= 25f;
+
+        // Wiersze danych
+        for (OverdueCategorySummary summary : summaries) {
+            String[] rowData = {
+                    summary.getCategory(),
+                    String.valueOf(summary.getCount()),
+                    String.valueOf(summary.getTotalOverdueDays()),
+                    String.format("%.1f", summary.getAverageOverdueDays())
+            };
+            drawTableFrame(x, currentY, tableWidth, 25f, colWidths);
+            drawRowData(rowData, x, currentY, colWidths);
+            currentY -= 25f;
+        }
+
+        // Wiersz podsumowania
+        int totalCount = summaries.stream().mapToInt(OverdueCategorySummary::getCount).sum();
+        long totalDays = summaries.stream().mapToLong(OverdueCategorySummary::getTotalOverdueDays).sum();
+        double avgDays = totalCount > 0 ? (double) totalDays / totalCount : 0.0;
+
+        String[] totalRow = {"RAZEM", String.valueOf(totalCount), String.valueOf(totalDays), String.format("%.1f", avgDays)};
+        drawTableFrame(x, currentY, tableWidth, 25f, colWidths);
+        drawRowData(totalRow, x, currentY, colWidths, true);
+    }
+
+    private void drawGenreSummarySection(List<GenreSummary> summaries, float x, float y, float tableWidth) throws IOException {
+        if (summaries == null || summaries.isEmpty()) return;
+
+        float currentY = y;
+        drawSectionHeader("Podsumowanie gatunków:", x, currentY);
+        currentY -= 20f;
+
+        drawSimpleSummaryTable(summaries, x, currentY, tableWidth,
+                s -> s.getGenre(), s -> s.getCount());
+    }
+
+    private void drawPublisherSummarySection(List<PublisherSummary> summaries, float x, float y, float tableWidth) throws IOException {
+        if (summaries == null || summaries.isEmpty()) return;
+
+        float currentY = y;
+        drawSectionHeader("Podsumowanie wydawców:", x, currentY);
+        currentY -= 20f;
+
+        drawSimpleSummaryTable(summaries, x, currentY, tableWidth,
+                s -> s.getPublisher(), s -> s.getCount());
     }
 
     /**
@@ -253,67 +323,6 @@ public class OverduePdfBuilder extends PdfBuilder {
     }
 
     /**
-     * Rysuje sekcję jeśli jest miejsce, inaczej dodaje nową stronę
-     */
-    private float drawSectionIfNeeded(float currentY, float minBottomMargin,
-                                      SectionDrawer drawer, HeightCalculator heightCalc) throws IOException {
-        float sectionHeight = heightCalc.calculate();
-
-        // Sprawdź czy sekcja w ogóle ma dane
-        if (sectionHeight <= 50f) { // 50f = tylko nagłówek bez danych
-            return currentY; // Nie rysuj pustej sekcji
-        }
-
-        // Sprawdź czy jest miejsce (z mniejszym marginesem)
-        if (currentY - sectionHeight - 30f < minBottomMargin) {
-            addNewPage();
-            currentY = getStartY();
-        }
-
-        drawer.draw();
-        return currentY - sectionHeight - 10f; // -10f = mniejszy odstęp po sekcji
-    }
-
-    /**
-     * Rysuje podsumowanie kategorii zaległości
-     */
-    private void drawOverdueCategorySummary(List<OverdueCategorySummary> summaries, float x, float y, float tableWidth) throws IOException {
-        if (summaries == null || summaries.isEmpty()) return;
-
-        drawSectionHeader("Podsumowanie zaległości:", x, y);
-
-        String[] headers = {"Kategoria", "Liczba", "Łączne dni", "Średnia"};
-        float[] colWidths = {120f, 80f, 100f, tableWidth - 300f};
-
-        float currentY = y - 15;
-        drawTableFrame(x, currentY, tableWidth, 25f, colWidths);
-        drawRowHeaders(headers, x, currentY, colWidths);
-        currentY -= 25f;
-
-        // Wiersze danych
-        for (OverdueCategorySummary summary : summaries) {
-            String[] rowData = {
-                    summary.getCategory(),
-                    String.valueOf(summary.getCount()),
-                    String.valueOf(summary.getTotalOverdueDays()),
-                    String.format("%.1f", summary.getAverageOverdueDays())
-            };
-            drawTableFrame(x, currentY, tableWidth, 25f, colWidths);
-            drawRowData(rowData, x, currentY, colWidths);
-            currentY -= 25f;
-        }
-
-        // Wiersz podsumowania
-        int totalCount = summaries.stream().mapToInt(OverdueCategorySummary::getCount).sum();
-        long totalDays = summaries.stream().mapToLong(OverdueCategorySummary::getTotalOverdueDays).sum();
-        double avgDays = totalCount > 0 ? (double) totalDays / totalCount : 0.0;
-
-        String[] totalRow = {"RAZEM", String.valueOf(totalCount), String.valueOf(totalDays), String.format("%.1f", avgDays)};
-        drawTableFrame(x, currentY, tableWidth, 25f, colWidths);
-        drawRowData(totalRow, x, currentY, colWidths, true);
-    }
-
-    /**
      * Pomocnicze metody do rysowania
      */
     private void drawSectionHeader(String title, float x, float y) throws IOException {
@@ -339,20 +348,6 @@ public class OverduePdfBuilder extends PdfBuilder {
                     bold ? getBoldFont() : getRegularFont(), 8);
             currentX += colWidths[i];
         }
-    }
-
-    private void drawGenreSummarySection(List<GenreSummary> summaries, float x, float y, float tableWidth) throws IOException {
-        if (summaries == null || summaries.isEmpty()) return;
-        drawSectionHeader("Podsumowanie gatunków:", x, y);
-        drawSimpleSummaryTable(summaries, x, y - 15, tableWidth,
-                s -> s.getGenre(), s -> s.getCount());
-    }
-
-    private void drawPublisherSummarySection(List<PublisherSummary> summaries, float x, float y, float tableWidth) throws IOException {
-        if (summaries == null || summaries.isEmpty()) return;
-        drawSectionHeader("Podsumowanie wydawców:", x, y);
-        drawSimpleSummaryTable(summaries, x, y - 15, tableWidth,
-                s -> s.getPublisher(), s -> s.getCount());
     }
 
     private <T> void drawSimpleSummaryTable(List<T> summaries, float x, float y, float tableWidth,
@@ -384,7 +379,8 @@ public class OverduePdfBuilder extends PdfBuilder {
      * Pomocnicze metody
      */
     private float calculateSummaryHeight(int itemCount) {
-        return (itemCount + 2) * 25f; // nagłówek + elementy + suma
+        if (itemCount == 0) return 0f;
+        return 20f + (itemCount + 2) * 25f; // nagłówek + elementy + suma + odstęp na nagłówek sekcji
     }
 
     private String truncateText(String text, int maxLength) {
@@ -395,7 +391,7 @@ public class OverduePdfBuilder extends PdfBuilder {
     private void drawOverdueReportHeader(String libraryName, String libraryDesc, String address, String city,
                                          String reportNumber, LocalDate reportDate, float rightStartX, float currentY,
                                          float headerHeight, float leftWidth, float rightWidth) throws IOException {
-        // Wykorzystaj metodę z PdfBuilder ale dostosuj tytuł
+        // Wykorzystuj metodę z PdfBuilder ale dostosuj tytuł
         float margin = getMargin();
         float tableWidth = getWidth();
         PDPageContentStream contentStream = getContentStream();
