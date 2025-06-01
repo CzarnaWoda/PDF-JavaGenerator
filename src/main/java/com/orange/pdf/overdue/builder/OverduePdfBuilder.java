@@ -59,7 +59,7 @@ public class OverduePdfBuilder extends PdfBuilder {
             float rightWidth = tableWidth - leftWidth;
             float margin = getMargin();
             float pageHeight = getHeight();
-            float minBottomMargin = 50f;
+            float minBottomMargin = 120f;
 
             float currentY = getStartY();
             float rightStartX = margin + leftWidth;
@@ -74,34 +74,60 @@ public class OverduePdfBuilder extends PdfBuilder {
             currentY = drawOverdueTable(overdueLoans, margin, currentY, tableWidth, pageHeight,
                     minBottomMargin, libraryName, reportNumber, reportDate);
 
-            // Sekcje podsumowań - używamy pomocniczych metod
+            // MNIEJSZY ODSTĘP PO TABELI GŁÓWNEJ
+            currentY -= 15f;
+
+            // Sekcje podsumowań z mniejszymi odstępami
             final float currentYForCategorySummary = currentY;
             currentY = drawSectionIfNeeded(currentY, minBottomMargin,
-                    () -> drawOverdueCategorySummary(categorySummaries, margin, currentYForCategorySummary - 40, tableWidth),
+                    () -> drawOverdueCategorySummary(categorySummaries, margin, currentYForCategorySummary - 25, tableWidth),
                     () -> calculateSummaryHeight(categorySummaries.size()));
+
+            // MNIEJSZY ODSTĘP PO PODSUMOWANIU ZALEGŁOŚCI
+            if (categorySummaries != null && !categorySummaries.isEmpty()) {
+                currentY -= 15f;
+            }
 
             final float currentYForGenreSummary = currentY;
             currentY = drawSectionIfNeeded(currentY, minBottomMargin,
-                    () -> drawGenreSummarySection(genreSummaries, margin, currentYForGenreSummary - 40, tableWidth),
+                    () -> drawGenreSummarySection(genreSummaries, margin, currentYForGenreSummary - 25, tableWidth),
                     () -> calculateSummaryHeight(genreSummaries.size()));
 
-            // Oblicz ile miejsca potrzeba na obie sekcje
-            float publisherSummaryHeight = calculateSummaryHeight(publisherSummaries.size());
-            float signatureHeight = 80f;
-            float neededHeight = publisherSummaryHeight + signatureHeight + 40f;
-
-            if (currentY - neededHeight < minBottomMargin) {
-                addNewPage();
-                currentY = getStartY();
+            // MNIEJSZY ODSTĘP PO PODSUMOWANIU GATUNKÓW
+            if (genreSummaries != null && !genreSummaries.isEmpty()) {
+                currentY -= 15f;
             }
 
-            // Najpierw rysuj podsumowanie wydawców
-            drawPublisherSummarySection(publisherSummaries, margin, currentY, tableWidth);
-            currentY -= publisherSummaryHeight + 40f;
+            // PODSUMOWANIE WYDAWCÓW z mniejszym odstępem
+            if (publisherSummaries != null && !publisherSummaries.isEmpty()) {
+                float publisherSummaryHeight = calculateSummaryHeight(publisherSummaries.size());
 
-            // Potem podpis
+                // Sprawdź czy jest miejsce na wydawców
+                if (currentY - publisherSummaryHeight - 40f < minBottomMargin) {
+                    addNewPage();
+                    currentY = getStartY();
+                }
+
+                // Rysuj podsumowanie wydawców
+                drawPublisherSummarySection(publisherSummaries, margin, currentY - 25, tableWidth);
+                currentY -= (publisherSummaryHeight + 25f);
+
+                // MNIEJSZY ODSTĘP PO PODSUMOWANIU WYDAWCÓW
+                currentY -= 20f;
+            }
+
+            // PODPIS NA SAMYM KOŃCU z dużym marginesem
+            float signatureHeight = 80f;
+            float minSpaceForSignature = 120f; // Duży margines dla podpisu
+
+            // Sprawdź czy jest wystarczająco miejsca na podpis
+            if (currentY - signatureHeight < minSpaceForSignature) {
+                addNewPage();
+                currentY = getStartY() - 60f; // Lekki margines od góry na nowej stronie
+            }
+
+            // Rysuj podpis z bezpiecznym marginesem
             drawOverdueSignatureSection(margin, currentY - signatureHeight, tableWidth, generatedBy, reportDate);
-
 
         } catch (IOException e) {
             safeEndText(getContentStream());
@@ -154,7 +180,7 @@ public class OverduePdfBuilder extends PdfBuilder {
      * Rysuje nagłówek tabeli zalegających
      */
     private void drawOverdueTableHeader(float x, float y, float tableWidth, float rowHeight, float[] colWidths) throws IOException {
-        String[] headers = {"Lp.", "ID wyp.", "Tytuł", "Autor", "Użytkownik", "Email", "Termin", "Dni zaleg."}; // Zmieniono "Telefon" na "Email"
+        String[] headers = {"Lp.", "ID wyp.", "Tytuł", "Autor", "Użytkownik", "Email", "Termin", "Dni zaleg."};
 
         // Ramka nagłówka
         drawTableFrame(x, y, tableWidth, rowHeight, colWidths);
@@ -181,7 +207,7 @@ public class OverduePdfBuilder extends PdfBuilder {
                 truncateText(loan.getTitle(), 20),
                 truncateText(loan.getAuthors(), 15),
                 truncateText(loan.getUserName(), 12),
-                truncateText(loan.getUserEmail() != null ? loan.getUserEmail() : "", 30), // Zmieniono na email z większym limitem
+                truncateText(loan.getUserEmail() != null ? loan.getUserEmail() : "", 30),
                 loan.getDueDate().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
                         .format(DateTimeFormatter.ofPattern("MM-dd")),
                 String.valueOf(loan.getOverdueDays())
@@ -232,12 +258,20 @@ public class OverduePdfBuilder extends PdfBuilder {
     private float drawSectionIfNeeded(float currentY, float minBottomMargin,
                                       SectionDrawer drawer, HeightCalculator heightCalc) throws IOException {
         float sectionHeight = heightCalc.calculate();
-        if (currentY - sectionHeight - 40 < minBottomMargin) {
+
+        // Sprawdź czy sekcja w ogóle ma dane
+        if (sectionHeight <= 50f) { // 50f = tylko nagłówek bez danych
+            return currentY; // Nie rysuj pustej sekcji
+        }
+
+        // Sprawdź czy jest miejsce (z mniejszym marginesem)
+        if (currentY - sectionHeight - 30f < minBottomMargin) {
             addNewPage();
             currentY = getStartY();
         }
+
         drawer.draw();
-        return currentY - sectionHeight - 40;
+        return currentY - sectionHeight - 10f; // -10f = mniejszy odstęp po sekcji
     }
 
     /**
